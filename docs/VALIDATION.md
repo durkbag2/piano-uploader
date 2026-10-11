@@ -1,5 +1,11 @@
 # Validation performed
 
+## BitMidi website-flow correction
+
+All **133 backend tests passed on Python 3.9.25 and Python 3.12**, and the production build passed. New tests exercise the exact requested flow with representative server-rendered HTML: search `Backstreet Boys Drowning`, recognize the top result only when all keywords match, open its source page, follow the labeled download link, generate MusicXML, and reuse cached MIDI bytes. Tests reject ambiguous/external/unlabeled download links and prevent selecting a top title with a missing keyword. They also verify HTTP 520 is reported as source unavailability rather than an empty successful search. Existing JSON fallback tests remain active.
+
+Chromium checks with controlled source responses confirmed the query button automatically selects the matching top title, keeps permission gating, passes the source page to generation, and leaves an incomplete match unselected. Live website search, source-page and JSON requests returned **HTTP 520** from BitMidi at validation time, so the real Drowning download could not be verified here. The adapter now follows the website flow; that implementation result is separate from live source availability.
+
 ## BitMidi source and download cache
 
 All **130 backend tests passed on Python 3.9.25 and Python 3.12**, including BitMidi's public JSON envelope, query encoding, supported slug formats, bounded/validated downloads, provider selection and isolated failures, source-page/download identity, malicious links/redirects, generation attribution, and cache reuse/expiry/corruption/privacy/eviction. Cache integration tests run the actual generation endpoint with mocked BitMidi responses: repeat generation downloads the MIDI once, while expired or modified bytes are downloaded again. Metadata/source validation still runs for cache hits. The production build passed.

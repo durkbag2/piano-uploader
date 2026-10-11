@@ -153,8 +153,9 @@ async def search_all_midi(query, sources=None):
             if data.get('error'):
                 metadata['message'] = data['error']
             return data['results'], metadata
-        except (HTTPException, asyncio.TimeoutError):
-            metadata.update(status='unavailable', message='Public MIDI search is unavailable here. Open the source website or upload an authorized MIDI file.')
+        except (HTTPException, asyncio.TimeoutError) as error:
+            message = error.detail if provider == 'bitmidi' and isinstance(error, HTTPException) else 'Public MIDI search is unavailable here. Open the source website or upload an authorized MIDI file.'
+            metadata.update(status='unavailable', message=message)
             return [], metadata
     resolved = await asyncio.gather(*(resolve(provider) for provider in selected))
     results = [item for records, _ in resolved for item in records]

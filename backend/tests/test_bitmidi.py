@@ -43,6 +43,8 @@ def client(tmp_path, monkeypatch):
 def test_official_bitmidi_search_envelope_returns_real_record_and_encoded_query(monkeypatch):
     query = 'Moonlight & Für Elise + Piano'
     def respond(request):
+        if request.url.path == '/search':
+            return httpx.Response(404)
         assert request.url.path == '/api/midi/search'
         assert request.url.params['q'] == query
         assert request.url.params['pageSize'] == '12'
@@ -104,6 +106,8 @@ def test_create_from_bitmidi_validates_source_record_and_preserves_unknown_right
         calls.append(request)
         assert request.url.host == 'bitmidi.com'
         assert 'authorization' not in request.headers
+        if request.url.path == '/moonlight-sonata-mid':
+            return httpx.Response(404)
         if request.url.path == '/api/midi/get':
             assert request.url.params['id'] == '123'
             return httpx.Response(200, json={'result': {'query': {'id': '123'}, 'result': RECORD, 'related': []}})
@@ -118,7 +122,7 @@ def test_create_from_bitmidi_validates_source_record_and_preserves_unknown_right
     assert 'Rights not specified' in result['source']['license']
     assert 'Unknown MIDI arranger' in result['musicxml']
     assert result['note_count'] == 1
-    assert len(calls) == 2
+    assert [request.url.path for request in calls] == ['/moonlight-sonata-mid', '/api/midi/get', '/uploads/123.mid']
 
 
 def test_bitmidi_source_page_can_resolve_official_download(monkeypatch):
@@ -156,7 +160,7 @@ def test_bitmidi_mismatched_source_page_rejected_before_download(monkeypatch):
     with pytest.raises(HTTPException) as error:
         asyncio.run(bitmidi.download_source('https://bitmidi.com/uploads/123.mid', 'Draft', 'https://bitmidi.com/different-midi-mid'))
     assert error.value.status_code == 422
-    assert len(calls) == 1
+    assert all(request.url.path != '/uploads/123.mid' for request in calls)
 
 
 def test_archive_download_cannot_redirect_into_bitmidi(monkeypatch):
@@ -214,6 +218,8 @@ def test_generation_downloads_once_then_uses_private_cache(client, monkeypatch):
     def respond(request):
         if request.url.path == '/api/midi/get':
             return httpx.Response(200, json={'result': {'result': RECORD}})
+        if not request.url.path.startswith('/uploads/'):
+            return httpx.Response(404)
         downloads.append(request.url.path)
         return httpx.Response(200, content=fixture_midi())
     mock_http(monkeypatch, respond)
@@ -265,3 +271,56 @@ def test_cache_limit_corruption_symlinks_and_unwritable_fallback(tmp_path, monke
     midi_cache.write(blocked, 'url', fixture_midi())
     assert blocked.read_text() == 'original'
     assert midi_cache.read(blocked, 'url') is None
+
+
+def test_website_search_clickthrough_download_and_cached_generation(client, monkeypatch):
+    query = 'Backstreet Boys Drowning'
+    page = 'https://bitmidi.com/backstreet-boys-drowning-mid'
+    calls = []
+    def respond(request):
+        calls.append(request.url.path)
+        if request.url.path == '/search':
+            assert request.url.params['q'] == query
+            return httpx.Response(200, headers={'content-type': 'text/html'}, text='<article><a title="Backstreet Boys - Drowning.mid" href="/backstreet-boys-drowning-mid"><h2>Backstreet Boys - Drowning.mid</h2></a></article><article><a href="/backstreet-boys-other-mid">Backstreet Boys Other.mid</a></article>')
+        if request.url.path == '/backstreet-boys-drowning-mid':
+            return httpx.Response(200, headers={'content-type': 'text/html'}, text='<h1>Backstreet Boys - Drowning.mid</h1><h3>Download this MIDI file</h3><a download="Drowning.mid" href="/uploads/123.mid">Download Drowning.mid</a>')
+        if request.url.path == '/uploads/123.mid':
+            return httpx.Response(200, content=fixture_midi())
+        raise AssertionError('Website workflow must not use the JSON API: ' + request.url.path)
+    mock_http(monkeypatch, respond)
+    result = client.get('/api/scores/search', params={'q': query, 'sources': 'bitmidi'}).json()
+    top = result['results'][0]
+    assert top['recommended'] is True and top['all_keywords_match'] is True
+    assert top['page_url'] == top['midi_url'] == page
+    assert result['results'][1]['recommended'] is False
+    body = {'title': top['title'], 'midi_url': top['midi_url'], 'source_page_url': top['page_url'], 'rights_confirmed': True}
+    first = client.post('/api/scores/from-source', json=body)
+    second = client.post('/api/scores/from-source', json=body)
+    assert first.status_code == second.status_code == 200
+    assert first.json()['source']['url'] == 'https://bitmidi.com/uploads/123.mid'
+    assert first.json()['source']['cached'] is False
+    assert second.json()['source']['cached'] is True
+    assert calls.count('/uploads/123.mid') == 1
+    assert '<score-partwise' in first.json()['musicxml']
+
+
+def test_top_result_needs_every_keyword_and_download_links_are_checked():
+    from backend.bitmidi_html import search_records, download_record, all_keywords
+    data = search_records('<article><a href="/backstreet-boys-other-mid">Backstreet Boys Other.mid</a></article><article><a href="/backstreet-boys-drowning-mid">Drowning_Backstreet-Boys.MID</a></article>', 'Backstreet Boys Drowning')
+    assert data[0]['recommended'] is False and data[0]['all_keywords_match'] is False
+    assert data[1]['all_keywords_match'] is True and data[1]['recommended'] is False
+    assert not all_keywords('Drowning', 'Drowningness.mid')
+    assert all_keywords('Beyoncé Halo', 'Beyonce-Halo.mid')
+    for html in ['<a href="https://evil.example/uploads/123.mid" download>Download</a>', '<a href="/uploads/123.mid">Advertisement</a>', '<a href="/uploads/123.mid" download>Download</a><a href="/uploads/456.mid" download>Download</a>']:
+        with pytest.raises(ValueError):
+            download_record(html, 'https://bitmidi.com/test-mid')
+
+
+def test_website_http520_is_reported_as_failure_not_empty_results(client, monkeypatch):
+    mock_http(monkeypatch, lambda request: httpx.Response(520, text='Web server error'))
+    response = client.get('/api/scores/search', params={'q': 'Backstreet Boys Drowning', 'sources': 'bitmidi'})
+    assert response.status_code == 200
+    data = response.json()
+    assert data['providers'][0]['status'] == 'unavailable'
+    assert 'HTTP 520' in data['providers'][0]['message']
+    assert data.get('error')

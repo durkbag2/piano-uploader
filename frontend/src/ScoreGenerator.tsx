@@ -5,7 +5,7 @@ import 'svg2pdf.js';
 import { ArrowUpRight, Check, CircleHelp, CloudUpload, Download, FileMusic, Loader2, Search } from 'lucide-react';
 import './score-generator.css';
 
-type Candidate = { id: string; title: string; creator?: string; source: string; page_url: string; midi_url: string; original_pdf_url?: string; pdf_url?: string; license?: string };
+type Candidate = { id: string; title: string; creator?: string; source: string; page_url: string; midi_url: string; original_pdf_url?: string; pdf_url?: string; license?: string; recommended?: boolean; all_keywords_match?: boolean };
 type MidiProvider = { id: string; name: string; status: 'ok' | 'external' | 'unavailable'; message?: string; search_url?: string; result_count?: number };
 const MIDI_SOURCES = [{ id: 'bitmidi', name: 'BitMidi' }, { id: 'archive', name: 'Internet Archive' }];
 const midiSiteUrl = (id: string, title: string) => id === 'bitmidi' ? `https://bitmidi.com/search?q=${encodeURIComponent(title.trim())}` : `https://archive.org/advancedsearch.php?q=${encodeURIComponent(title.trim() + ' AND mediatype:audio')}`;
@@ -64,7 +64,11 @@ export default function ScoreGenerator({ initialTitle = '', storageName, storage
     try {
       const result = await request<{ results: Candidate[]; providers?: MidiProvider[]; error?: string }>(`/api/scores/search?q=${encodeURIComponent(text.trim())}&sources=${encodeURIComponent(midiSources.join(','))}`, { signal: controller.signal });
       if (version !== lookupVersion.current || controller.signal.aborted) return;
-      setCandidates([...result.results.filter(candidate => candidate.source === 'BitMidi'), ...result.results.filter(candidate => candidate.source !== 'BitMidi')]); setProviders(result.providers || []); setSearched(text.trim()); if (result.error) setError(result.error);
+      const ordered = [...result.results.filter(candidate => candidate.source === 'BitMidi'), ...result.results.filter(candidate => candidate.source !== 'BitMidi')];
+      setCandidates(ordered);
+      const top = ordered.find(candidate => candidate.source === 'BitMidi');
+      if (top?.recommended && top.all_keywords_match) { setSelected(top); setNotice('Selected the top BitMidi result: its title contains every search keyword. Confirm permission, then create the score to download its MIDI.'); }
+      setProviders(result.providers || []); setSearched(text.trim()); if (result.error) setError(result.error);
     } catch (e) {
       if (version === lookupVersion.current && !controller.signal.aborted) { setError(e instanceof Error ? e.message : 'Could not search for MIDI arrangements.'); setSearched(text.trim()); }
     } finally { if (version === lookupVersion.current) setBusy(''); }

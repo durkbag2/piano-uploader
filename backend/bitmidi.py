@@ -1,4 +1,4 @@
-"""BitMidi's public JSON routes, verified against its official open-source site.
+"""BitMidi website search/download flow with a public JSON fallback.
 
 Website code licensing does not establish a license for hosted MIDI music.
 """
@@ -59,16 +59,30 @@ async def api(client, route, params):
 async def search(query):
     try:
         async with httpx.AsyncClient(timeout=12, follow_redirects=False) as client:
+            from .bitmidi_html import search_records, all_keywords
+            try:
+                response = await get_bounded(client, search_url(query), 2 * 1024 * 1024, validator=validate_url)
+                if 'text/html' in response.headers.get('content-type', '').lower():
+                    records = search_records(response.text, query)
+                    if records or 'No results with your search terms' in response.text:
+                        return {'results': records}
+            except (httpx.HTTPError, ValueError, HTTPException):
+                pass
             data = await api(client, 'search', {'q': query, 'page': 0, 'pageSize': 12})
             if not isinstance(data.get('results'), list):
                 raise ValueError('The BitMidi public API did not return search records.')
             results = []
-            for item in data['results'][:12]:
+            for index, item in enumerate(data['results'][:12]):
                 try:
-                    results.append(record(item))
+                    candidate = record(item)
+                    candidate['all_keywords_match'] = all_keywords(query, candidate['title'])
+                    candidate['recommended'] = index == 0 and candidate['all_keywords_match']
+                    results.append(candidate)
                 except (ValueError, HTTPException):
                     continue
             return {'results': results}
+    except httpx.HTTPStatusError as error:
+        raise HTTPException(502, f'BitMidi returned HTTP {error.response.status_code}. Its website search could not be loaded; try the website link or try again later.')
     except (httpx.HTTPError, ValueError, HTTPException):
         raise HTTPException(502, 'BitMidi public MIDI search is unavailable. Open its website or upload an authorized MIDI file.')
 
@@ -88,6 +102,33 @@ async def download_source(url, title, source_page_url=None, cache_dir=None):
         validate_url(source_page_url)
     try:
         async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
+            from .bitmidi_html import download_record, source_page
+            page = source_page_url or (url if not match else None)
+            if page:
+                try:
+                    page = source_page(page)
+                    if not match and page != source_page(url):
+                        raise HTTPException(422, 'The selected BitMidi page does not match this source.')
+                    html = await get_bounded(client, page, 2 * 1024 * 1024, validator=validate_url)
+                    if 'text/html' not in html.headers.get('content-type', '').lower():
+                        raise ValueError('Source page did not return HTML.')
+                    source = download_record(html.text, page)
+                except (httpx.HTTPError, ValueError):
+                    source = None
+                if source:
+                    if match and source['url'] != 'https://bitmidi.com' + parsed.path:
+                        raise HTTPException(422, 'The selected BitMidi page does not match this download.')
+                    from . import midi_cache
+                    content = midi_cache.read(cache_dir, source['url'])
+                    source['cached'] = content is not None
+                    if content is None:
+                        response = await get_bounded(client, source['url'], MAX_MIDI_BYTES, validator=validate_url)
+                        content = response.content
+                        if not content.startswith(b'MThd'):
+                            raise HTTPException(422, 'The BitMidi download link did not return a MIDI document.')
+                        midi_cache.write(cache_dir, source['url'], content)
+                    source['title'] = source['title'] or title
+                    return content, source
             data = await api(client, 'get', params)
             item = record(data.get('result'))
             if match and item['midi_url'] != 'https://bitmidi.com' + parsed.path:
