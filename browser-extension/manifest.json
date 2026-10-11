@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Piano Uploader Search Companion",
+  "version": "0.1.0",
+  "description": "Export loaded Musicnotes or MuseScore search links for Piano Uploader.",
+  "permissions": ["activeTab", "scripting"],
+  "action": { "default_popup": "popup.html" }
+}

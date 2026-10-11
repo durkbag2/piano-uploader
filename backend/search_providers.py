@@ -2,7 +2,7 @@
 import asyncio
 import re
 from html.parser import HTMLParser
-from urllib.parse import quote, urlencode, urljoin, urlparse
+from urllib.parse import quote, urlencode, urljoin, urlparse, parse_qs
 
 import httpx
 from fastapi import HTTPException
@@ -31,6 +31,39 @@ def result(provider, identifier, title, page_url, creator='See source'):
             'thumbnail_url': '', 'license': 'Check licensing and access requirements on the source'}
 
 
+def validated_source_url(provider, url):
+    hosts = {'www.musicnotes.com', 'musicnotes.com'} if provider == 'musicnotes' else {'musescore.com', 'www.musescore.com'}
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme != 'https' or parsed.hostname not in hosts or parsed.username or parsed.password or parsed.port not in (None, 443):
+            raise ValueError('Use a supported HTTPS source URL.')
+    except ValueError:
+        raise ValueError('Use a supported HTTPS source URL.')
+    return parsed
+
+
+def canonical_product(provider, url):
+    parsed = validated_source_url(provider, url)
+    if provider == 'musicnotes':
+        ppn = parse_qs(parsed.query).get('ppn', [])
+        if parsed.path.lower() != '/sheetmusic/mtd.asp' or len(ppn) != 1 or not re.fullmatch(r'[a-zA-Z0-9]+', ppn[0]):
+            raise ValueError('Use a Musicnotes product page URL containing its ppn.')
+        return ppn[0], 'https://www.musicnotes.com/sheetmusic/mtd.asp?' + urlencode({'ppn': ppn[0]})
+    match = re.fullmatch(r'/user/([0-9]+)/scores/([0-9]+)/?', parsed.path)
+    if not match:
+        raise ValueError('Use a MuseScore score page URL.')
+    return match.group(1) + ':' + match.group(2), 'https://musescore.com/user/' + match.group(1) + '/scores/' + match.group(2)
+
+
+def validate_capture_search(provider, url):
+    parsed = validated_source_url(provider, url)
+    expected = '/search/go' if provider == 'musicnotes' else '/sheetmusic'
+    if parsed.path.rstrip('/') != expected:
+        raise ValueError('Capture must identify the native provider search page.')
+    base = 'https://www.musicnotes.com' if provider == 'musicnotes' else 'https://musescore.com'
+    return base + expected + ('?' + parsed.query if parsed.query else '')
+
+
 class ProductLinks(HTMLParser):
     """Read public product links only; never decode embedded download payloads."""
     def __init__(self, provider):
@@ -47,24 +80,10 @@ class ProductLinks(HTMLParser):
             href = attrs.get('href', '')
             base = 'https://www.musicnotes.com' if self.provider == 'musicnotes' else 'https://musescore.com'
             url = urljoin(base, href)
-            parsed = urlparse(url)
-            hosts = {'www.musicnotes.com', 'musicnotes.com'} if self.provider == 'musicnotes' else {'musescore.com', 'www.musescore.com'}
             try:
-                valid_port = parsed.port in (None, 443)
+                identifier, url = canonical_product(self.provider, url)
             except ValueError:
-                valid_port = False
-            if parsed.scheme != 'https' or parsed.hostname not in hosts or parsed.username or parsed.password or not valid_port:
                 return
-            if self.provider == 'musicnotes':
-                match = re.search(r'(?:[?&]ppn=)([a-zA-Z0-9]+)', parsed.query and '?' + parsed.query, re.I)
-                if parsed.path.lower() != '/sheetmusic/mtd.asp' or not match:
-                    return
-                identifier = match.group(1)
-            else:
-                match = re.fullmatch(r'/user/([0-9]+)/scores/([0-9]+)/?', parsed.path)
-                if not match:
-                    return
-                identifier = match.group(1) + ':' + match.group(2)
             self.active = {'id': identifier, 'url': url, 'parts': [], 'label': attrs.get('title') or attrs.get('aria-label') or ''}
         elif tag == 'img' and self.active and attrs.get('alt'):
             self.active['parts'].append(attrs['alt'])

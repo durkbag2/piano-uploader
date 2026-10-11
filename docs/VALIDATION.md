@@ -1,5 +1,13 @@
 # Validation performed
 
+## Browser-assisted website search and local PDF import
+
+All **85 backend tests passed on Python 3.9.25 and Python 3.12**. New cases verify capture host/path validation, deduplication and canonical links, limits and unsupported providers, local PDF rights/MIME/signature/size checks, bounded streaming without Content-Length, and saves to both a simulated local iCloud folder and mocked Google Drive. Existing search and storage tests continue to pass. The production build passed.
+
+Chromium checks exercised the companion collector on rendered Musicnotes/MuseScore fixtures, including hidden links, duplicates, title extraction, canonical URLs and unsupported pages. App browser checks imported those captures through the actual backend, opened source-only cards, verified website search query encoding, and uploaded a generated PDF through the actual local upload endpoint to a temporary simulated Mac folder. The served PDF matched its original bytes; rights gating, invalid-PDF rejection, cleared upload inputs, mobile width and JavaScript-error checks passed. This is a local integration test, not a live Apple synchronization test.
+
+The companion popup's capture and JSON-download controls were checked with mocked Chrome APIs. Native unpacked-extension loading could not be validated with this environment's Chromium runtime. Live Musicnotes requests remained blocked by the cloud proxy; MuseScore returned a browser verification page. Successful capture against the user's authenticated Chrome/Edge pages and changing live website markup remains unverified. The supported product URL patterns and installation steps are documented in [website search instructions](WEBSITE_SEARCH.md).
+
 ## iCloud Drive addition
 
 All **70 backend tests passed on Python 3.9.25 and Python 3.12** after adding iCloud Drive. The 21 additional cases cover legacy Google settings/queue migration, folder validation and symlink boundaries, unavailable/non-macOS storage, local PDF saves and collision handling, current-folder previews, cloud-only placeholders, polling without Google credentials, nested-folder handoffs, and separate provider queues. Mac behavior is simulated against temporary local folders; these tests do not establish native Apple synchronization.

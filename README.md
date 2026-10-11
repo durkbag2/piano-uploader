@@ -35,6 +35,12 @@ npm run dev
 
 If an earlier checkout fails to install a pinned package, update the app branch with `git pull --ff-only origin feat/piano-uploader-app` and rerun the dependency installation. The lock file uses published PyPI releases and includes Python 3.9-specific dependencies. Do not manually change one version while retaining the obsolete lock file.
 
+## Musicnotes and MuseScore website searches
+
+Enter a query and choose **Search Musicnotes** or **Search MuseScore** to search in your own browser. The optional Chrome/Edge companion in `browser-extension` exports loaded score links; use **Import browser search capture** to bring them into the app. Install and use it following [website search instructions](docs/WEBSITE_SEARCH.md).
+
+After downloading a purchased or authorized PDF through its source website, use **My library → Add a PDF from your device** to save it to the active Google Drive or iCloud Drive destination. This works independently of the companion and accepts PDFs up to 25 MB. Captured listings are source links; they do not provide restricted PDFs or PDF thumbnails.
+
 ## iCloud Drive on your Mac
 
 iCloud storage uses the Mac's existing iCloud Drive folder. It does not require Google authorization, an Apple password in this app, or a new developer account. The backend must run on your Mac to use this option; a Linux cloud server cannot access your Mac's iCloud Drive.

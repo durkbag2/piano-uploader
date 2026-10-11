@@ -13,7 +13,7 @@ from typing import Optional, Literal
 from urllib.parse import quote, urljoin, urlparse, urlencode
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field, field_validator
@@ -398,20 +398,25 @@ async def pdf(url: str):
     return Response(content, media_type='application/pdf', headers={'Content-Disposition': 'inline; filename="sheet-music.pdf"', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=300'})
 
 
-@app.post('/api/upload')
-async def upload(body: Upload):
-    if not body.rights_confirmed:
-        raise HTTPException(400, 'Confirm that you have permission to download and store this sheet music.')
+async def prepare_storage():
     cfg = settings()
     if cfg.storage_provider == 'icloud':
         icloud_storage.folder_path(ICLOUD_ROOT, cfg.icloud_folder)
-        content = await fetch_pdf(body.pdf_url)
-        return icloud_storage.save_pdf(ICLOUD_ROOT, cfg.icloud_folder, body.title, content, MAX_PDF_BYTES)
+        return cfg, None
     if not cfg.folder_id:
         raise HTTPException(400, 'Set a Google Drive folder ID first.')
-    token = await google_token()
-    content = await fetch_pdf(body.pdf_url)
-    title = body.title.strip()
+    return cfg, await google_token()
+
+
+async def save_pdf_to_storage(content, title, destination):
+    if len(content) > MAX_PDF_BYTES:
+        raise HTTPException(413, 'PDF exceeds the 25 MB limit.')
+    if not content.startswith(b'%PDF-'):
+        raise HTTPException(422, 'The file is not a PDF document.')
+    cfg, token = destination
+    if cfg.storage_provider == 'icloud':
+        return icloud_storage.save_pdf(ICLOUD_ROOT, cfg.icloud_folder, title, content, MAX_PDF_BYTES)
+    title = title.strip()
     if not title:
         raise HTTPException(400, 'A title is required.')
     if not title.lower().endswith('.pdf'):
@@ -424,9 +429,42 @@ async def upload(body: Upload):
             response = await client.post('https://www.googleapis.com/upload/drive/v3/files', params={'uploadType': 'multipart', 'fields': 'id,name,webViewLink', 'supportsAllDrives': 'true'}, headers={'Authorization': f'Bearer {token}', 'Content-Type': f'multipart/related; boundary={boundary}'}, content=multipart)
             response.raise_for_status()
             result = response.json()
+            if not isinstance(result, dict) or not isinstance(result.get('id'), str) or not result['id']:
+                raise ValueError('Google Drive did not return a saved file identifier.')
     except (httpx.HTTPError, ValueError):
         raise HTTPException(502, 'Upload to Google Drive failed. Check folder access and try again.')
     return {'id': result['id'], 'title': result.get('name', title), 'storage_provider': 'google', 'web_view_link': result.get('webViewLink', f"https://drive.google.com/file/d/{result['id']}/view")}
+
+
+@app.post('/api/upload')
+async def upload(body: Upload):
+    if not body.rights_confirmed:
+        raise HTTPException(400, 'Confirm that you have permission to download and store this sheet music.')
+    destination = await prepare_storage()
+    content = await fetch_pdf(body.pdf_url)
+    return await save_pdf_to_storage(content, body.title, destination)
+
+
+@app.post('/api/upload-local')
+async def upload_local(request: Request, title: str = Query(..., min_length=1, max_length=200), rights_confirmed: bool = False):
+    if not rights_confirmed:
+        raise HTTPException(400, 'Confirm that you have permission to store this PDF.')
+    if not title.strip():
+        raise HTTPException(400, 'A title is required.')
+    if request.headers.get('content-type', '').split(';')[0].strip().lower() != 'application/pdf':
+        raise HTTPException(415, 'Send the PDF as an application/pdf request body.')
+    length = request.headers.get('content-length', '')
+    if length.isdigit() and int(length) > MAX_PDF_BYTES:
+        raise HTTPException(413, 'PDF exceeds the 25 MB limit.')
+    destination = await prepare_storage()
+    chunks = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_PDF_BYTES:
+            raise HTTPException(413, 'PDF exceeds the 25 MB limit.')
+        chunks.append(chunk)
+    return await save_pdf_to_storage(b''.join(chunks), title, destination)
 
 
 @app.get('/api/queue')
@@ -525,3 +563,40 @@ def icloud_pdf(identifier: str):
         raise HTTPException(404, 'Select iCloud storage to view local iCloud PDFs.')
     content = icloud_storage.serve_pdf(ICLOUD_ROOT, cfg.icloud_folder, identifier, MAX_PDF_BYTES)
     return Response(content, media_type='application/pdf', headers={'Content-Disposition': 'inline; filename="sheet-music.pdf"', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store'})
+
+
+class CapturedResult(BaseModel):
+    title: str = Field(min_length=1, max_length=250)
+    page_url: str = Field(min_length=1, max_length=2048)
+
+    @field_validator('title')
+    @classmethod
+    def title_text(cls, value):
+        value = ' '.join(value.split())
+        if not value:
+            raise ValueError('A captured result title is required.')
+        return value
+
+
+class SearchCapture(BaseModel):
+    provider: Literal['musicnotes', 'musescore']
+    page_url: str = Field(min_length=1, max_length=2048)
+    results: list[CapturedResult] = Field(max_length=50)
+
+
+@app.post('/api/search/capture')
+def capture_search(body: SearchCapture):
+    from .search_providers import canonical_product, validate_capture_search, result, PROVIDERS
+    try:
+        search_page = validate_capture_search(body.provider, body.page_url)
+        records = []
+        seen = set()
+        for entry in body.results:
+            identifier, page_url = canonical_product(body.provider, entry.page_url)
+            if identifier not in seen:
+                seen.add(identifier)
+                records.append(result(body.provider, identifier, entry.title, page_url))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    provider = {'id': body.provider, 'name': PROVIDERS[body.provider], 'status': 'ok' if records else 'external', 'search_url': search_page, 'result_count': len(records), 'message': 'Captured in your browser. Source links were validated; website access, licensing and PDF download availability were not verified.'}
+    return {'results': records, 'providers': [provider]}
