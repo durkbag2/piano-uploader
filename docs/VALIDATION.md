@@ -1,5 +1,15 @@
 # Validation performed
 
+## Piano score generation
+
+All **105 backend tests passed on Python 3.9.25 and Python 3.12**. New tests cover grand-staff pitch placement, chords, independent voice timing with rests, sustained ties across measures, eighth-note triplets, dotted rhythms, opening meter/key/tempo, source attribution and XML escaping, malformed MIDI, percussion omission, file/duration/measure/density limits, streamed upload limits, rights checks, source URL/redirect validation, metadata preservation, and bounded source discovery. The original search/storage tests continue to pass.
+
+The updated Python lock installed in the workspace and `pip check` passed. `npm ci` and the TypeScript/production build passed. The notation tool is loaded separately from the initial app; its large engraving/PDF bundle produces a Vite size warning but the build completes.
+
+Live Internet Archive lookup for **Moonlight Sonata** returned four MIDI candidates. The selected Chordzy arrangement downloaded and converted **1,157 notes over 324.706 seconds into 69 measures**. Its metadata supplied the creator, CC BY 4.0 license URL, item page, and matching original PDF. Chromium rendered 12 notation pages, downloaded a matching MusicXML file and an approximately 8.4 MB vector PDF, and saved the generated PDF through the actual upload endpoint to a temporary simulated Mac iCloud folder. PDF page count, credit/license/adaptation text, title, visible tempo, and first-page notation were checked with PyMuPDF. Export fixes normalize supported font families and convert SVG point font sizes to pixels.
+
+Browser checks also verified creation from a universal search-query action, creation from a catalog result card, title handoff and automatic source lookup, explicit source/rights gating, local MIDI input, an empty-source fallback, no JavaScript errors, and no horizontal overflow at 390 pixels. The empty-source and catalog-card cases use controlled fixtures; the Moonlight source search/download/conversion is live. This validates a generated notation draft, not a musician-reviewed arrangement or Smart Pianist analysis. Apple synchronization and on-device import remain untested.
+
 ## Browser-assisted website search and local PDF import
 
 All **85 backend tests passed on Python 3.9.25 and Python 3.12**. New cases verify capture host/path validation, deduplication and canonical links, limits and unsupported providers, local PDF rights/MIME/signature/size checks, bounded streaming without Content-Length, and saves to both a simulated local iCloud folder and mocked Google Drive. Existing search and storage tests continue to pass. The production build passed.

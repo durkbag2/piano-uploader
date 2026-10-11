@@ -600,3 +600,59 @@ def capture_search(body: SearchCapture):
         raise HTTPException(422, str(exc))
     provider = {'id': body.provider, 'name': PROVIDERS[body.provider], 'status': 'ok' if records else 'external', 'search_url': search_page, 'result_count': len(records), 'message': 'Captured in your browser. Source links were validated; website access, licensing and PDF download availability were not verified.'}
     return {'results': records, 'providers': [provider]}
+
+
+class ScoreSource(BaseModel):
+    midi_url: str = Field(min_length=1, max_length=2048)
+    title: str = Field(min_length=1, max_length=200)
+    rights_confirmed: bool = False
+
+
+@app.post('/api/scores/from-midi')
+async def score_from_midi(request: Request, title: str = Query(..., min_length=1, max_length=200), rights_confirmed: bool = False):
+    from .score_generation import generate_score, MAX_MIDI_BYTES
+    if not rights_confirmed:
+        raise HTTPException(400, 'Confirm that you have permission to create sheet music from this MIDI.')
+    if not title.strip():
+        raise HTTPException(400, 'A title is required.')
+    if request.headers.get('content-type', '').split(';')[0].strip().lower() not in {'audio/midi', 'audio/x-midi', 'application/octet-stream'}:
+        raise HTTPException(415, 'Send MIDI as audio/midi or application/octet-stream.')
+    length = request.headers.get('content-length', '')
+    if length.isdigit() and int(length) > MAX_MIDI_BYTES:
+        raise HTTPException(413, 'MIDI exceeds the 2 MB limit.')
+    chunks = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_MIDI_BYTES:
+            raise HTTPException(413, 'MIDI exceeds the 2 MB limit.')
+        chunks.append(chunk)
+    return await asyncio.to_thread(generate_score, b''.join(chunks), title.strip())
+
+
+@app.post('/api/scores/from-source')
+async def score_from_source(body: ScoreSource):
+    from .score_generation import generate_score
+    from .score_sources import download_source
+    if not body.rights_confirmed:
+        raise HTTPException(400, 'Confirm that you have permission to adapt this MIDI and preserve its source attribution.')
+    if not body.title.strip():
+        raise HTTPException(400, 'A title is required.')
+    content, source = await download_source(body.midi_url, body.title.strip())
+    result = await asyncio.to_thread(generate_score, content, body.title.strip(), source)
+    if not source.get('metadata_verified'):
+        result['warnings'].append('Source attribution could not be verified automatically. Check the source page and preserve all required credits.')
+    return result
+
+
+@app.get('/api/scores/search')
+async def score_search(q: str = ''):
+    from .score_sources import search_midi
+    if len(q) > 200:
+        raise HTTPException(400, 'Search must be 200 characters or fewer.')
+    if not q.strip():
+        return {'results': []}
+    try:
+        return await asyncio.wait_for(search_midi(q.strip()), timeout=30)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, 'Public MIDI search timed out. Try again or upload an authorized MIDI file.')

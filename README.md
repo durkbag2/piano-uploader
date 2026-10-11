@@ -1,6 +1,6 @@
 # Piano Uploader
 
-A local browser app to find sheet-music PDFs, preview pages, save authorized copies to Google Drive or an iCloud Drive folder on your Mac, and detect new files for handoff to your Yamaha Smart Pianist workflow.
+A local browser app to find sheet-music PDFs, generate piano notation drafts from existing MIDI arrangements, save authorized copies to Google Drive or an iCloud Drive folder on your Mac, and detect new files for handoff to your Yamaha Smart Pianist workflow.
 
 Target devices: Yamaha CSP-255 and iPad (10th generation). Automatic import into Smart Pianist is **not implemented or verified**. Polling and **Import now** scan the selected storage folder and prepare a queue; opening a file does not confirm it was imported. See [device integration notes](docs/SMART_PIANIST.md).
 
@@ -34,6 +34,12 @@ npm run dev
 ```
 
 If an earlier checkout fails to install a pinned package, update the app branch with `git pull --ff-only origin feat/piano-uploader-app` and rerun the dependency installation. The lock file uses published PyPI releases and includes Python 3.9-specific dependencies. Do not manually change one version while retaining the obsolete lock file.
+
+## Create piano sheet music
+
+Use **Create piano score** on any search query or result card, or open **Create a score** and enter a song title. Select an existing MIDI transcription or arrangement, confirm permission to adapt it, and generate a traditional piano notation draft. Preview the treble and bass staves, download PDF or editable MusicXML, and save the PDF to your selected storage destination. You can also upload your own MIDI.
+
+This converts existing notes; a song title alone cannot reconstruct the music. Review the draft's rhythm and inferred hand assignment. When available, an original PDF may preserve the arrangement more faithfully. See [score generation and dependency update instructions](docs/SCORE_GENERATION.md).
 
 ## Musicnotes and MuseScore website searches
 
