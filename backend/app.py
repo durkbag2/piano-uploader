@@ -9,14 +9,16 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Literal
 from urllib.parse import quote, urljoin, urlparse, urlencode
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from . import icloud_storage
 
 STATE_DIR = Path(os.environ.get('PIANO_STATE_DIR', Path(__file__).parent / '.state'))
 CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
@@ -24,6 +26,7 @@ CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 REDIRECT_URI = 'http://localhost:8000/api/auth/callback'
 FRONTEND = 'http://localhost:5173'
 MAX_PDF_BYTES = 25 * 1024 * 1024
+ICLOUD_ROOT = Path.home() / 'Library' / 'Mobile Documents' / 'com~apple~CloudDocs'
 poll_lock = asyncio.Lock()
 
 
@@ -45,6 +48,8 @@ def db():
         folder = json.loads(stored['value']).get('folder_id', '') if stored else ''
         connection.execute('INSERT INTO queue SELECT id, drive_id, title, status, web_view_link, created_at, ? FROM queue_legacy', (folder,))
         connection.execute('DROP TABLE queue_legacy')
+    if 'storage_provider' not in [row['name'] for row in connection.execute('PRAGMA table_info(queue)')]:
+        connection.execute("ALTER TABLE queue ADD COLUMN storage_provider TEXT NOT NULL DEFAULT 'google'")
     connection.commit()
     os.chmod(STATE_DIR / 'state.sqlite3', 0o600)
     return connection
@@ -63,6 +68,14 @@ def put_value(key, value):
 
 
 class Settings(BaseModel):
+    storage_provider: Literal['google', 'icloud'] = 'google'
+    icloud_folder: str = Field(default='Piano Uploader', min_length=1, max_length=200)
+
+    @field_validator('icloud_folder')
+    @classmethod
+    def validate_icloud_folder(cls, value):
+        return icloud_storage.validate_folder(value)
+
     folder_id: str = Field(default='', max_length=200, pattern=r'^[a-zA-Z0-9_-]*$')
     poll_interval_seconds: int = Field(default=60, ge=10, le=86400)
     polling_enabled: bool = False
@@ -121,21 +134,38 @@ async def drive_files():
             page = data.get('nextPageToken')
             if not page:
                 break
-    return [{'id': f['id'], 'title': f['name'], 'mime_type': f.get('mimeType', 'application/pdf'), 'web_view_link': f.get('webViewLink', f"https://drive.google.com/file/d/{f['id']}/view"), 'download_url': f.get('webContentLink', ''), 'thumbnail_url': f.get('thumbnailLink', ''), 'modified_time': f.get('modifiedTime', '')} for f in files]
+    return [{'id': f['id'], 'title': f['name'], 'mime_type': f.get('mimeType', 'application/pdf'), 'web_view_link': f.get('webViewLink', f"https://drive.google.com/file/d/{f['id']}/view"), 'download_url': f.get('webContentLink', ''), 'thumbnail_url': f.get('thumbnailLink', ''), 'modified_time': f.get('modifiedTime', ''), 'storage_provider': 'google', 'folder_hint': cfg.folder_id} for f in files]
+
+
+def queue_namespace():
+    cfg = settings()
+    return cfg.folder_id if cfg.storage_provider == 'google' else 'icloud:' + cfg.icloud_folder
+
+
+async def active_files():
+    cfg = settings()
+    if cfg.storage_provider == 'icloud':
+        return icloud_storage.local_files(ICLOUD_ROOT, cfg.icloud_folder, MAX_PDF_BYTES)
+    return await drive_files()
 
 
 def queue_items():
     with contextlib.closing(db()) as conn:
-        return [dict(row) for row in conn.execute('SELECT id, drive_id, title, status, web_view_link, created_at FROM queue WHERE folder_id=? ORDER BY created_at DESC', (settings().folder_id,))]
+        rows = [dict(row) for row in conn.execute('SELECT id, drive_id, title, status, web_view_link, created_at, storage_provider FROM queue WHERE folder_id=? ORDER BY created_at DESC', (queue_namespace(),))]
+    cfg = settings()
+    for row in rows:
+        row['folder_hint'] = cfg.icloud_folder if cfg.storage_provider == 'icloud' else cfg.folder_id
+    return rows
 
 
 def enqueue(songs):
-    folder_id = settings().folder_id
+    folder_id = queue_namespace()
+    provider = settings().storage_provider
     added = 0
     with contextlib.closing(db()) as conn:
         for song in songs:
             item_id = f"{folder_id}:{song['id']}" if folder_id else song['id']
-            cursor = conn.execute('INSERT OR IGNORE INTO queue VALUES (?,?,?,?,?,?,?)', (item_id, song['id'], song['title'], 'pending', song['web_view_link'], now(), folder_id))
+            cursor = conn.execute('INSERT OR IGNORE INTO queue VALUES (?,?,?,?,?,?,?,?)', (item_id, song['id'], song['title'], 'pending', song['web_view_link'], now(), folder_id, provider))
             added += cursor.rowcount
         conn.commit()
     return added
@@ -143,17 +173,17 @@ def enqueue(songs):
 
 async def poll():
     async with poll_lock:
-        songs = await drive_files()
+        songs = await active_files()
         added = enqueue(songs)
         put_value('last_poll_at', now())
         put_value('last_poll_error', None)
         put_value('next_poll_epoch', time.time() + settings().poll_interval_seconds)
-        return {'added': added, 'items': queue_items()}
+        return {'added': added, 'items': queue_items(), 'storage_provider': settings().storage_provider, **({'message': icloud_storage.SCAN_MESSAGE} if settings().storage_provider == 'icloud' else {})}
 
 
 async def poll_tick():
     cfg = settings()
-    if cfg.polling_enabled and get_value('google_token') and cfg.folder_id:
+    if cfg.polling_enabled and (cfg.storage_provider == 'icloud' or (get_value('google_token') and cfg.folder_id)):
         due = get_value('next_poll_epoch', 0)
         if time.time() >= due:
             try:
@@ -197,7 +227,8 @@ async def localhost_only(request: Request, call_next):
 
 @app.get('/api/status')
 def status():
-    return {'mode': 'live', 'google_connected': bool(get_value('google_token')), 'oauth_configured': bool(CLIENT_ID and CLIENT_SECRET), 'yamaha_auto_import_supported': False}
+    available, message = icloud_storage.availability(ICLOUD_ROOT)
+    return {'mode': 'live', 'google_connected': bool(get_value('google_token')), 'oauth_configured': bool(CLIENT_ID and CLIENT_SECRET), 'yamaha_auto_import_supported': False, 'storage_provider': settings().storage_provider, 'icloud_available': available, 'icloud_root_hint': str(ICLOUD_ROOT), 'icloud_message': message}
 
 
 @app.get('/api/settings')
@@ -207,6 +238,14 @@ def read_settings():
 
 @app.put('/api/settings')
 def save_settings(body: Settings):
+    previous = settings()
+    if body.storage_provider == 'icloud':
+        icloud_storage.folder_path(ICLOUD_ROOT, body.icloud_folder)
+    if (previous.storage_provider != body.storage_provider or
+            (body.storage_provider == 'google' and previous.folder_id != body.folder_id) or
+            (body.storage_provider == 'icloud' and previous.icloud_folder != body.icloud_folder)):
+        put_value('last_poll_at', None)
+        put_value('last_poll_error', None)
     put_value('settings', body.model_dump())
     put_value('next_poll_epoch', time.time())
     return body.model_dump()
@@ -250,7 +289,8 @@ async def disconnect():
     put_value('google_token', None)
     put_value('oauth_state', None)
     cfg = settings()
-    cfg.polling_enabled = False
+    if cfg.storage_provider == 'google':
+        cfg.polling_enabled = False
     put_value('settings', cfg.model_dump())
     revoked = True
     if token:
@@ -265,7 +305,13 @@ async def disconnect():
 
 @app.get('/api/library')
 async def library():
-    return {'songs': await drive_files()}
+    cfg = settings()
+    data = {'songs': await active_files(), 'storage_provider': cfg.storage_provider}
+    if cfg.storage_provider == 'icloud':
+        folder = icloud_storage.folder_path(ICLOUD_ROOT, cfg.icloud_folder)
+        placeholders = icloud_storage.placeholder_count(folder)
+        data.update(message=icloud_storage.SCAN_MESSAGE + (f' {placeholders} cloud-only placeholder(s) are not downloaded; use Download Now in Finder.' if placeholders else ''), placeholders=placeholders)
+    return data
 
 
 async def search_archive(q: str = ''):
@@ -357,6 +403,10 @@ async def upload(body: Upload):
     if not body.rights_confirmed:
         raise HTTPException(400, 'Confirm that you have permission to download and store this sheet music.')
     cfg = settings()
+    if cfg.storage_provider == 'icloud':
+        icloud_storage.folder_path(ICLOUD_ROOT, cfg.icloud_folder)
+        content = await fetch_pdf(body.pdf_url)
+        return icloud_storage.save_pdf(ICLOUD_ROOT, cfg.icloud_folder, body.title, content, MAX_PDF_BYTES)
     if not cfg.folder_id:
         raise HTTPException(400, 'Set a Google Drive folder ID first.')
     token = await google_token()
@@ -376,7 +426,7 @@ async def upload(body: Upload):
             result = response.json()
     except (httpx.HTTPError, ValueError):
         raise HTTPException(502, 'Upload to Google Drive failed. Check folder access and try again.')
-    return {'id': result['id'], 'title': result.get('name', title), 'web_view_link': result.get('webViewLink', f"https://drive.google.com/file/d/{result['id']}/view")}
+    return {'id': result['id'], 'title': result.get('name', title), 'storage_provider': 'google', 'web_view_link': result.get('webViewLink', f"https://drive.google.com/file/d/{result['id']}/view")}
 
 
 @app.get('/api/queue')
@@ -390,7 +440,7 @@ async def import_now():
     return await poll()
 
 
-@app.post('/api/queue/{item_id}/opened')
+@app.post('/api/queue/{item_id:path}/opened')
 def opened(item_id: str):
     with contextlib.closing(db()) as conn:
         cursor = conn.execute("UPDATE queue SET status='opened' WHERE id=?", (item_id,))
@@ -466,3 +516,12 @@ async def search(q: str = '', sources: Optional[str] = None):
     if not q.strip():
         return {'results': [], 'providers': []}
     return await search_all(q.strip(), sources, search_archive)
+
+
+@app.get('/api/icloud/files/{identifier}')
+def icloud_pdf(identifier: str):
+    cfg = settings()
+    if cfg.storage_provider != 'icloud':
+        raise HTTPException(404, 'Select iCloud storage to view local iCloud PDFs.')
+    content = icloud_storage.serve_pdf(ICLOUD_ROOT, cfg.icloud_folder, identifier, MAX_PDF_BYTES)
+    return Response(content, media_type='application/pdf', headers={'Content-Disposition': 'inline; filename="sheet-music.pdf"', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store'})

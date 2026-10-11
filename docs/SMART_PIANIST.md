@@ -1,13 +1,15 @@
 # Smart Pianist integration boundaries
 
-The target device setup is a **Yamaha CSP-255 with an iPad (10th generation)**. This first version runs in a local browser on the computer hosting the server, with Google Drive providing the handoff to the iPad. It can discover sheet music, preview PDFs, copy supported downloads into a configured Google Drive folder, and poll that folder for newly added files. Its current implementation prepares a device handoff; it does not perform or verify an unattended import into Smart Pianist.
+The target device setup is a **Yamaha CSP-255 with an iPad (10th generation)**. This version runs in a local browser on the computer hosting the server. Google Drive remains a storage option; on a Mac, iCloud Drive provides a folder that can appear in the iPad's Files app. The app can discover sheet music, preview PDFs, save supported downloads into the selected storage folder, and poll that folder for newly added files. It prepares a device handoff; it does not perform or verify an unattended import into Smart Pianist.
 
 ## What the import workflow means
 
-- **Polling** checks the configured Drive folder and records new files in a handoff queue. The interval controls the scan frequency while the server is running.
+- **Polling** checks the selected Google Drive or local iCloud Drive folder and records new files in a handoff queue. The interval controls the scan frequency while the server is running.
 - **Import now** performs that scan immediately. Finding a file or preparing a handoff is not confirmation that Yamaha imported it.
 - Open or download a queued file on the iPhone or iPad. Use the device's Files/share interface and Smart Pianist's supported import procedure for that file format and piano model.
 - The application's handoff status records that a file was **opened**, not that Smart Pianist imported, analyzed, or played it. Check the result inside Smart Pianist separately.
+
+For iCloud Drive, enable syncing on the Mac and iPad using the same Apple Account, save a score into the configured folder, and wait for it to appear under **Files → Browse → iCloud Drive → your folder** on the iPad. Use Smart Pianist's supported import procedure to select the PDF from Files. The browser's **Open PDF locally** link is for inspection on the Mac; it is not a remote iPad link or an import command. A local file save confirms only that bytes were written on the Mac. Apple synchronization and Smart Pianist import must be verified on the device.
 
 ## File formats and device compatibility
 

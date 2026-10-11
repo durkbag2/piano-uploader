@@ -1,8 +1,8 @@
 # Piano Uploader
 
-A local browser app to find sheet-music PDFs, preview pages, save authorized copies to Google Drive, and detect new files for handoff to your Yamaha Smart Pianist workflow.
+A local browser app to find sheet-music PDFs, preview pages, save authorized copies to Google Drive or an iCloud Drive folder on your Mac, and detect new files for handoff to your Yamaha Smart Pianist workflow.
 
-Target devices: Yamaha CSP-255 and iPad (10th generation). Automatic import into Smart Pianist is **not implemented or verified**. Polling and **Import now** scan Drive and prepare a queue; opening a file does not confirm it was imported. See [device integration notes](docs/SMART_PIANIST.md).
+Target devices: Yamaha CSP-255 and iPad (10th generation). Automatic import into Smart Pianist is **not implemented or verified**. Polling and **Import now** scan the selected storage folder and prepare a queue; opening a file does not confirm it was imported. See [device integration notes](docs/SMART_PIANIST.md).
 
 ## Local development
 
@@ -34,6 +34,22 @@ npm run dev
 ```
 
 If an earlier checkout fails to install a pinned package, update the app branch with `git pull --ff-only origin feat/piano-uploader-app` and rerun the dependency installation. The lock file uses published PyPI releases and includes Python 3.9-specific dependencies. Do not manually change one version while retaining the obsolete lock file.
+
+## iCloud Drive on your Mac
+
+iCloud storage uses the Mac's existing iCloud Drive folder. It does not require Google authorization, an Apple password in this app, or a new developer account. The backend must run on your Mac to use this option; a Linux cloud server cannot access your Mac's iCloud Drive.
+
+1. Enable **iCloud Drive** in macOS **System Settings → Apple Account → iCloud → Drive**. On older macOS versions this appears under **Apple ID**. Check that iCloud Drive appears in Finder.
+2. Enable iCloud Drive on your iPad using the same Apple Account. Confirm **iCloud Drive** is visible under **Browse → Locations** in the Files app.
+3. In Piano Uploader's **Settings & connections**, choose **iCloud Drive** as the storage destination. Choose a folder name such as `Piano Uploader`, then save settings. This is a folder inside iCloud Drive, not an arbitrary filesystem path.
+4. Select a score, preview it, confirm that you have permission to save it, and choose **Save to iCloud Drive**. The app writes the original PDF into the local folder. macOS manages synchronization separately; a successful save is not confirmation that the iPad has received it.
+5. After syncing, find the score on your iPad under **Files → Browse → iCloud Drive → Piano Uploader** (or your configured folder). Use Smart Pianist's supported import/file-picker workflow for a compatible score. Import remains a manual device step.
+
+You can also copy authorized PDFs downloaded from another source into the same folder using Finder. Automatic checks and **Import now** scan the selected storage folder and prepare handoffs. Keep the Mac backend running for polling. If a file is stored only in iCloud and not downloaded to the Mac, download it through Finder before expecting a local preview.
+
+The default local iCloud Drive root is `~/Library/Mobile Documents/com~apple~CloudDocs`. The app limits storage to a subfolder beneath that location. It detects local availability and access; it cannot inspect Apple's sync status, grant macOS permissions, or verify the iPad's Apple Account. If iCloud is unavailable, enable it on the Mac and check the account running the backend.
+
+Google Drive remains available as a separate destination. Switching destinations retains the Google connection and folder settings; it does not copy files between the two services.
 
 ## Google Drive connection
 

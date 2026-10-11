@@ -1,5 +1,13 @@
 # Validation performed
 
+## iCloud Drive addition
+
+All **70 backend tests passed on Python 3.9.25 and Python 3.12** after adding iCloud Drive. The 21 additional cases cover legacy Google settings/queue migration, folder validation and symlink boundaries, unavailable/non-macOS storage, local PDF saves and collision handling, current-folder previews, cloud-only placeholders, polling without Google credentials, nested-folder handoffs, and separate provider queues. Mac behavior is simulated against temporary local folders; these tests do not establish native Apple synchronization.
+
+The TypeScript/production build passed. Chromium checks against the running Linux backend confirmed unavailable iCloud storage is gated. Browser checks with mocked Mac responses verified destination selection/save, PDF rights gating, iCloud upload and library refresh, cloud-only Download Now guidance, nested-folder handoff opening, retention of the Google folder when switching, no JavaScript errors, and no horizontal overflow at a 390-pixel viewport. No actual Apple account, macOS FileProvider, iPad sync, or Smart Pianist import was tested.
+
+## Earlier Google Drive and search checks
+
 The local development launcher (`bash scripts/dev.sh`) started both services successfully. Dependency installation was verified with the Python lock file and `npm ci`; `pip check` and the TypeScript/production build passed.
 
 - **49 backend tests passed**: persistent settings and interval validation; OAuth state expiration/replay and successful mocked token exchange; Drive pagination; authorized multipart PDF upload; queue deduplication and folder isolation; polling enable/interval behavior; PDF/thumbnail destination, redirect, signature, and size restrictions; origin/host protections; multi-source query encoding/selection; failure isolation; provider redirect/response limits; actual IMSLP API schema without page IDs; malformed responses; and representative Musicnotes/MuseScore product-link parsing. External Google calls and commercial-source product parser fixtures in these tests are mocked.

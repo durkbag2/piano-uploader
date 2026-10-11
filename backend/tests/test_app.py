@@ -25,7 +25,7 @@ def client():
 def test_settings_validate_and_persist(client):
     assert client.put('/api/settings', json={'folder_id': 'abc', 'poll_interval_seconds': 1}).status_code == 422
     assert client.put('/api/settings', json={'folder_id': "x' or true", 'poll_interval_seconds': 60}).status_code == 422
-    payload = {'folder_id': 'my_folder-12', 'poll_interval_seconds': 30, 'polling_enabled': True}
+    payload = {'folder_id': 'my_folder-12', 'poll_interval_seconds': 30, 'polling_enabled': True, 'storage_provider': 'google', 'icloud_folder': 'Piano Uploader'}
     assert client.put('/api/settings', json=payload).json() == payload
     assert client.get('/api/settings').json() == payload
 
