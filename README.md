@@ -6,11 +6,11 @@ Target devices: Yamaha CSP-255 and iPad (10th generation). Automatic import into
 
 ## Local development
 
-Requirements: Python 3.12+ and Node.js 22+.
+Requirements: Python 3.9+ and Node.js 22+. The backend is tested with Python 3.9 and 3.12; Python 3.9.6 on macOS has compatible dependency wheels.
 
 ```bash
-cd /workspace/piano-uploader
-python -m venv backend/.venv
+cd piano-uploader
+python3 -m venv backend/.venv
 backend/.venv/bin/python -m pip install -r backend/requirements-lock.txt
 cd frontend
 npm ci
@@ -19,6 +19,21 @@ bash scripts/dev.sh
 ```
 
 Open the local frontend on port 5173 in your browser. The API listens on port 8000. Both bind to loopback for this single-user version. Keep the backend running for polling; timers cannot operate while it is stopped. Do not expose this version to the public internet: it has no multi-user account system.
+
+On macOS, you can also use two terminals to start the services. From the project root in the first terminal:
+
+```bash
+backend/.venv/bin/python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000 --no-access-log
+```
+
+In the second terminal, from the project root:
+
+```bash
+cd frontend
+npm run dev
+```
+
+If an earlier checkout fails to install a pinned package, update the app branch with `git pull --ff-only origin feat/piano-uploader-app` and rerun the dependency installation. The lock file uses published PyPI releases and includes Python 3.9-specific dependencies. Do not manually change one version while retaining the obsolete lock file.
 
 ## Google Drive connection
 

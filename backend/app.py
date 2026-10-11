@@ -9,6 +9,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 from urllib.parse import quote, urljoin, urlparse, urlencode
 
 import httpx
@@ -458,7 +459,7 @@ async def thumbnail(url: str):
 
 
 @app.get('/api/search')
-async def search(q: str = '', sources: str | None = None):
+async def search(q: str = '', sources: Optional[str] = None):
     from .search_providers import search_all
     if len(q) > 200:
         raise HTTPException(400, 'Search must be 200 characters or fewer.')

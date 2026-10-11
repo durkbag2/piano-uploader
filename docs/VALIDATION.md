@@ -12,4 +12,6 @@ Musicnotes requests were denied by the cloud proxy, so live product retrieval re
 
 Google OAuth credentials were absent, so actual consent, Drive library permissions, live uploads, and live Drive polling were not tested. Smart Pianist on the CSP-255/iPad was not available for a device test. Official App Store release history confirms PDF import and CSP-family Score Reader features; no unattended import adapter has been verified or implemented.
 
-One backend test-runner deprecation warning reports that Starlette's HTTPX test-client integration may change in a future release. All tests executed and passed with the checked-in locked versions.
+The dependency lock was corrected after a macOS installation reported an unavailable `annotated-types==0.8.0`. The replacement pins use published PyPI releases. Clean installs and `pip check` passed with Python 3.9.25 and 3.12; all 49 backend tests passed in both environments without the earlier test-client deprecation warning. Binary dependency resolution for Python 3.9.6 succeeded for both Intel macOS and Apple Silicon, including the Python 3.9-specific `exceptiongroup` and `tomli` dependencies. These are Mac wheel checks, not native execution on the user's Mac.
+
+Python 3.9 support required replacing a Python 3.10-only union annotation. The local launcher also no longer uses `wait -n`, which is unavailable in macOS's default Bash; a launcher check confirmed that a failed backend returns its exit code and stops the frontend.

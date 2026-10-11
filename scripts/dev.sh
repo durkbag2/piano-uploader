@@ -12,4 +12,12 @@ api_pid=$!
 web_pid=$!
 cleanup() { kill "$api_pid" "$web_pid" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
-wait -n "$api_pid" "$web_pid"
+# macOS ships Bash 3.2, which does not support wait -n.
+while kill -0 "$api_pid" 2>/dev/null && kill -0 "$web_pid" 2>/dev/null; do
+  sleep 1
+done
+if ! kill -0 "$api_pid" 2>/dev/null; then
+  wait "$api_pid"
+else
+  wait "$web_pid"
+fi
