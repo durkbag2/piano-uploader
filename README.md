@@ -37,7 +37,7 @@ If an earlier checkout fails to install a pinned package, update the app branch 
 
 ## Create piano sheet music
 
-Use **Create piano score** on any search query or result card, or open **Create a score** and enter a song title. Select an existing MIDI transcription or arrangement, confirm permission to adapt it, and generate a traditional piano notation draft. Preview the treble and bass staves, download PDF or editable MusicXML, and save the PDF to your selected storage destination. You can also upload your own MIDI.
+Use **Create piano score** on any search query or result card, or open **Create a score** and enter a song title. Search **Internet Archive and BitMidi** (both selected by default), select an existing MIDI transcription or arrangement, confirm permission to adapt it, and generate a traditional piano notation draft. Preview the treble and bass staves, download PDF or editable MusicXML, and save the PDF to your selected storage destination. You can also upload your own MIDI.
 
 This converts existing notes; a song title alone cannot reconstruct the music. Review the draft's rhythm and inferred hand assignment. When available, an original PDF may preserve the arrangement more faithfully. See [score generation and dependency update instructions](docs/SCORE_GENERATION.md).
 

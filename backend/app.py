@@ -603,6 +603,7 @@ def capture_search(body: SearchCapture):
 
 
 class ScoreSource(BaseModel):
+    source_page_url: Optional[str] = Field(default=None, max_length=2048)
     midi_url: str = Field(min_length=1, max_length=2048)
     title: str = Field(min_length=1, max_length=200)
     rights_confirmed: bool = False
@@ -638,7 +639,7 @@ async def score_from_source(body: ScoreSource):
         raise HTTPException(400, 'Confirm that you have permission to adapt this MIDI and preserve its source attribution.')
     if not body.title.strip():
         raise HTTPException(400, 'A title is required.')
-    content, source = await download_source(body.midi_url, body.title.strip())
+    content, source = await download_source(body.midi_url, body.title.strip(), body.source_page_url, cache_dir=STATE_DIR / 'midi-cache')
     result = await asyncio.to_thread(generate_score, content, body.title.strip(), source)
     if not source.get('metadata_verified'):
         result['warnings'].append('Source attribution could not be verified automatically. Check the source page and preserve all required credits.')
@@ -646,13 +647,13 @@ async def score_from_source(body: ScoreSource):
 
 
 @app.get('/api/scores/search')
-async def score_search(q: str = ''):
-    from .score_sources import search_midi
+async def score_search(q: str = '', sources: Optional[str] = None):
+    from .score_sources import search_all_midi
     if len(q) > 200:
         raise HTTPException(400, 'Search must be 200 characters or fewer.')
     if not q.strip():
         return {'results': []}
     try:
-        return await asyncio.wait_for(search_midi(q.strip()), timeout=30)
+        return await asyncio.wait_for(search_all_midi(q.strip(), sources), timeout=30)
     except asyncio.TimeoutError:
         raise HTTPException(504, 'Public MIDI search timed out. Try again or upload an authorized MIDI file.')

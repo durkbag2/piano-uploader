@@ -1,5 +1,15 @@
 # Validation performed
 
+## BitMidi source and download cache
+
+All **130 backend tests passed on Python 3.9.25 and Python 3.12**, including BitMidi's public JSON envelope, query encoding, supported slug formats, bounded/validated downloads, provider selection and isolated failures, source-page/download identity, malicious links/redirects, generation attribution, and cache reuse/expiry/corruption/privacy/eviction. Cache integration tests run the actual generation endpoint with mocked BitMidi responses: repeat generation downloads the MIDI once, while expired or modified bytes are downloaded again. Metadata/source validation still runs for cache hits. The production build passed.
+
+The adapter schema was checked against the official `feross/bitmidi.com` source at commit `f8aa4d6094474626153948c553e1a3d9c8168b7b`; its tests use that documented schema and synthetic MIDI, not live BitMidi captures. Direct live BitMidi requests were blocked by the cloud proxy. A live combined Moonlight query retained four Internet Archive candidates while reporting BitMidi unavailable, proving source failure isolation in the running backend.
+
+Chromium checks confirmed the universal query button includes BitMidi first, both sources default selected, unavailable-source website links, working Archive candidates, and (with mocked BitMidi responses) candidate order, source-page handoff, rights gating, notation/PDF export, empty-provider gating, mobile width and no JavaScript errors. The exported fixture PDF retained BitMidi credit, its source URL and unknown-license text, without mislabeling the file as Archive. Successful live BitMidi search/download still requires validation after network access is available.
+
+The cloud configuration draft adds `bitmidi.com` and `www.bitmidi.com` while preserving existing network destinations, and updates reusable startup guidance. The tool reported that review/publication is required; saving the draft did not apply it to this running environment. This cloud restriction does not establish that BitMidi is blocked on the user's Mac.
+
 ## Piano score generation
 
 All **105 backend tests passed on Python 3.9.25 and Python 3.12**. New tests cover grand-staff pitch placement, chords, independent voice timing with rests, sustained ties across measures, eighth-note triplets, dotted rhythms, opening meter/key/tempo, source attribution and XML escaping, malformed MIDI, percussion omission, file/duration/measure/density limits, streamed upload limits, rights checks, source URL/redirect validation, metadata preservation, and bounded source discovery. The original search/storage tests continue to pass.

@@ -1,7 +1,7 @@
 """Public MIDI discovery and bounded downloads, restricted to Internet Archive."""
 import asyncio
 from pathlib import PurePosixPath
-from urllib.parse import quote, unquote, urljoin, urlparse
+from urllib.parse import quote, unquote, urljoin, urlparse, urlencode
 
 import httpx
 from fastapi import HTTPException
@@ -20,9 +20,9 @@ def validate_url(url):
         raise HTTPException(400, 'Only HTTPS Internet Archive MIDI URLs are supported.')
 
 
-async def get_bounded(client, url, limit, params=None):
+async def get_bounded(client, url, limit, params=None, validator=validate_url):
     for _ in range(6):
-        validate_url(url)
+        validator(url)
         async with client.stream('GET', url, params=params) as response:
             params = None
             if response.status_code in (301, 302, 303, 307, 308):
@@ -66,7 +66,14 @@ def source_metadata(identifier, metadata, filename, url, title):
     return {'type': 'archive', 'url': url, 'page_url': 'https://archive.org/details/' + quote(identifier, safe=''), 'title': text(meta.get('title'), title) or title, 'creator': text(meta.get('creator'), 'Unknown source author') or 'Unknown source author', 'license': license_url or 'Rights not specified — check the source', 'license_url': license_url, 'pdf_url': ('https://archive.org/download/' + quote(identifier, safe='') + '/' + quote(matching_pdf, safe='')) if matching_pdf else ''}
 
 
-async def download_source(url, title):
+async def download_source(url, title, source_page_url=None, cache_dir=None):
+    try:
+        host = (urlparse(url).hostname or '').lower()
+    except ValueError:
+        raise HTTPException(400, 'Invalid MIDI source URL.')
+    if host in {'bitmidi.com', 'www.bitmidi.com'}:
+        from .bitmidi import download_source as bitmidi_download
+        return await bitmidi_download(url, title, source_page_url, cache_dir)
     validate_url(url)
     path = urlparse(url).path
     parts = path.split('/')
@@ -130,3 +137,27 @@ async def search_midi(query):
             return {'results': results, **({'error': f'{errors} source records could not be loaded.'} if errors else {})}
     except (httpx.HTTPError, ValueError, HTTPException):
         raise HTTPException(502, 'Public MIDI search is unavailable. Try sheet-music search or upload an authorized MIDI file.')
+
+
+async def search_all_midi(query, sources=None):
+    from . import bitmidi
+    selected = ['bitmidi', 'archive'] if sources is None else list(dict.fromkeys(source.strip() for source in sources.split(',') if source.strip()))
+    if not selected or any(source not in {'archive', 'bitmidi'} for source in selected):
+        raise HTTPException(400, 'Choose MIDI sources from archive, bitmidi.')
+    async def resolve(provider):
+        metadata = {'id': provider, 'name': 'Internet Archive' if provider == 'archive' else 'BitMidi', 'search_url': ('https://archive.org/search?' + urlencode({'query': query + ' MIDI'})) if provider == 'archive' else bitmidi.search_url(query), 'result_count': 0}
+        try:
+            function = search_midi if provider == 'archive' else bitmidi.search
+            data = await asyncio.wait_for(function(query), timeout=25 if provider == 'archive' else 15)
+            metadata.update(status='ok', result_count=len(data['results']))
+            if data.get('error'):
+                metadata['message'] = data['error']
+            return data['results'], metadata
+        except (HTTPException, asyncio.TimeoutError):
+            metadata.update(status='unavailable', message='Public MIDI search is unavailable here. Open the source website or upload an authorized MIDI file.')
+            return [], metadata
+    resolved = await asyncio.gather(*(resolve(provider) for provider in selected))
+    results = [item for records, _ in resolved for item in records]
+    providers = [metadata for _, metadata in resolved]
+    errors = [metadata['name'] for metadata in providers if metadata['status'] == 'unavailable']
+    return {'results': results, 'providers': providers, **({'error': 'MIDI search unavailable for: ' + ', '.join(errors) + '. Use the source website links.'} if errors else {})}
