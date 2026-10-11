@@ -10,7 +10,7 @@ type MidiProvider = { id: string; name: string; status: 'ok' | 'external' | 'una
 const MIDI_SOURCES = [{ id: 'bitmidi', name: 'BitMidi' }, { id: 'archive', name: 'Internet Archive' }];
 const midiSiteUrl = (id: string, title: string) => id === 'bitmidi' ? `https://bitmidi.com/search?q=${encodeURIComponent(title.trim())}` : `https://archive.org/advancedsearch.php?q=${encodeURIComponent(title.trim() + ' AND mediatype:audio')}`;
 const midiSourceName = (type: string) => type === 'bitmidi' ? 'BitMidi MIDI' : type === 'upload' ? 'Your uploaded MIDI' : 'Internet Archive MIDI';
-type Score = { musicxml: string; title: string; warnings: string[]; source: { type: 'upload' | 'archive' | 'bitmidi'; url?: string; page_url?: string; creator?: string; license?: string; license_url?: string; pdf_url?: string }; note_count: number; duration_seconds: number };
+type Score = { musicxml: string; title: string; warnings: string[]; source: { type: 'upload' | 'archive' | 'bitmidi'; url?: string; page_url?: string; creator?: string; license?: string; license_url?: string; pdf_url?: string }; note_count: number; duration_seconds: number; reduction_applied?: boolean };
 type Props = { initialTitle?: string; storageName: string; storageReady: boolean; onSaved: () => Promise<void>; onFindExisting: (title: string) => void; onConfigureStorage: () => void };
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -119,7 +119,7 @@ export default function ScoreGenerator({ initialTitle = '', storageName, storage
       doc.setFont('times', 'normal'); doc.setFontSize(16); doc.setTextColor(0);
       await doc.svg(copy, { x: (210 - width * ratio) / 2, y: 10, width: width * ratio, height: height * ratio });
       const source = score!.source;
-      const credit = [`Source: ${midiSourceName(source.type)}.`, source.creator ? `Source / arranger: ${source.creator}.` : '', source.license ? `License: ${source.license}.` : 'Review original source permissions.', source.license_url || '', source.page_url || source.url || '', 'Adaptation: inferred hands; quantized rhythms. Review before playing.'].filter(Boolean).join(' ');
+      const credit = [`Source: ${midiSourceName(source.type)}.`, source.creator ? `Source / arranger: ${source.creator}.` : '', source.license ? `License: ${source.license}.` : 'Review original source permissions.', source.license_url || '', source.page_url || source.url || '', 'Adaptation: inferred hands; quantized rhythms.', score!.reduction_applied ? 'Dense overlapping voices reduced to onset chords; note lengths adjusted.' : '', 'Review before playing.'].filter(Boolean).join(' ');
       doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(80);
       doc.text(doc.splitTextToSize(credit, 190), 10, 272, { lineHeightFactor: 1.15 });
       doc.setFontSize(6); doc.text(`Page ${index + 1} of ${pages.length}`, 200, 292, { align: 'right' });

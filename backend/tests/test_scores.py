@@ -75,7 +75,9 @@ def test_chords_grandstaff_rests_meter_tempo_key_and_escape():
 
 def test_polyphonic_sustained_notes_tie_across_bars_and_preserve_voicing():
     data = midi([(0, on(60)), (480, on(67)), (960, off(67)), (2400, off(60))])
-    root = ET.fromstring(scores.generate_score(data, 'Sustained')['musicxml'])
+    result = scores.generate_score(data, 'Sustained')
+    assert result['reduction_applied'] is False
+    root = ET.fromstring(result['musicxml'])
     assert len(root.findall('.//measure')) == 2
     assert root.find('.//tie[@type="start"]') is not None
     assert root.find('.//tie[@type="stop"]') is not None
@@ -256,3 +258,38 @@ def test_uploaded_midi_over_five_thousand_notes_generates_complete_score(client)
     root = ET.fromstring(result['musicxml'])
     assert len(root.findall('.//note/pitch')) == 6004
     assert_measure_timing(root)
+
+
+def test_dense_overlap_reduces_both_hands_preserving_distinct_pitch_attacks(client):
+    events = [(0, on(pitch)) for pitch in list(range(36, 49)) + list(range(60, 73))]
+    events += [(480 + index * 60, off(pitch)) for index, pitch in enumerate(list(range(36, 49)) + list(range(60, 73)))]
+    events += [(240, on(75)), (1440, off(75))]
+    data = midi(events)
+    response = client.post('/api/scores/from-midi?title=Dense%20MIDI&rights_confirmed=true', content=data, headers={'Content-Type': 'audio/midi'})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['reduction_applied'] is True
+    assert result['note_count'] == 27
+    assert any('note lengths' in warning for warning in result['warnings'])
+    root = ET.fromstring(result['musicxml'])
+    assert 'note lengths adjusted' in root.findtext('identification/rights')
+    assert len({note.findtext('voice') for note in root.findall('.//note')}) == 2
+    assert_measure_timing(root)
+    expected_notes = scores.parse_midi(data)[0]
+    expected = {(start, pitch) for start, end, pitch in expected_notes}
+    actual = set()
+    for index, measure in enumerate(root.findall('.//measure')):
+        cursor = 0
+        last_attack = 0
+        for element in measure:
+            if element.tag == 'backup':
+                cursor -= int(element.findtext('duration'))
+            elif element.tag == 'note':
+                if element.find('chord') is None:
+                    last_attack = cursor
+                    cursor += int(element.findtext('duration'))
+                pitch = element.find('pitch')
+                if pitch is not None and element.find('tie[@type="stop"]') is None:
+                    number = (int(pitch.findtext('octave')) + 1) * 12 + {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}[pitch.findtext('step')] + int(pitch.findtext('alter', '0'))
+                    actual.add((index * 96 + last_attack, number))
+    assert actual == expected

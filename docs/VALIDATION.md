@@ -1,5 +1,11 @@
 # Validation performed
 
+## Dense overlapping voice reduction
+
+All **135 backend tests passed on Python 3.9.25 and Python 3.12**, and the production build passed. A regression exercises a MIDI requiring more than 12 independent voices in both staves: the actual upload endpoint generates a two-voice chord reduction instead of the previous overlap error. It verifies exact preservation of distinct pitch/onset pairs, correct per-voice measure timing, and disclosure of adjusted note lengths in warnings and MusicXML credits. The existing normal-density polyphony/tie test confirms those scores are not reduced.
+
+Chromium uploaded that dense MIDI to the running backend, displayed the reduction warning, rendered the grand staff, and downloaded a PDF without JavaScript errors. The exported PDF was checked for the reduction/note-length disclosure. This is a disclosed notation reduction, not a verified performance-faithful or musician-reviewed piano arrangement.
+
 ## Removal of the 5,000-note input cutoff
 
 All **134 backend tests passed on Python 3.9.25 and Python 3.12** after removing the MIDI note-start count rejection. A regression uploads a 6,004-note MIDI through the actual score-creation endpoint, verifies success and all 6,004 pitched notes in the generated MusicXML, and checks each voice's measure timing. No replacement input note-count cutoff was added. Existing file-size, event-count, duration, measure, voice-density and rendered-symbol safeguards remain.

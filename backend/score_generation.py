@@ -128,10 +128,27 @@ def allocate_voices(notes, staff):
             voices.append([])
             voice_ends.append(0)
         if len(voices) > 12:
-            raise HTTPException(422, 'The MIDI has too many overlapping voices for a readable piano draft.')
+            return reduce_to_chords(notes, staff), True
         voices[index].append((start, end, sorted(set(pitches))))
         voice_ends[index] = end
-    return voices or [[]]
+    return voices or [[]], False
+
+
+def reduce_to_chords(notes, staff):
+    """Keep distinct pitch attacks while simplifying dense releases to one voice."""
+    attacks = defaultdict(list)
+    for start, end, pitch in notes:
+        if (pitch >= 60) == (staff == 1):
+            attacks[start].append((end, pitch))
+    starts = sorted(attacks)
+    voice = []
+    for index, start in enumerate(starts):
+        members = attacks[start]
+        end = max(end for end, _ in members)
+        if index + 1 < len(starts):
+            end = min(end, starts[index + 1])
+        voice.append((start, end, sorted({pitch for _, pitch in members})))
+    return [voice]
 
 
 def chunks(duration):
@@ -192,6 +209,13 @@ def write_piece(measure, pitches, duration, staff, voice, start, original_start,
 
 def generate_score(content, title, source=None):
     notes, tempos, meter, key, duration, warnings = parse_midi(content)
+    (upper, upper_reduced), (lower, lower_reduced) = allocate_voices(notes, 1), allocate_voices(notes, 2)
+    reduced = upper_reduced or lower_reduced
+    adaptation = ADAPTATION
+    if reduced:
+        staves = ' and '.join(name for name, changed in [('Treble', upper_reduced), ('bass', lower_reduced)] if changed)
+        warnings.append(staves + ' voices were reduced to onset-aligned chords because the MIDI has dense overlaps. Distinct pitches and attacks are retained; note lengths are harmonized within each chord and clipped at the next attack. Review sustain and voicing in MusicXML.')
+        adaptation += ' Dense overlapping voices reduced to onset chords; note lengths adjusted.'
     source = source or {'type': 'upload', 'title': title, 'creator': 'User-provided MIDI', 'license': 'User-confirmed permissions'}
     measure_length = meter[0] * DIVISIONS * 4 // meter[1]
     end = max(end for _, end, _ in notes)
@@ -205,7 +229,7 @@ def generate_score(content, title, source=None):
     license_text = source.get('license', 'Check source')
     if source.get('license_url') and source['license_url'] not in license_text:
         license_text += ' (' + source['license_url'] + ')'
-    add(identity, 'rights', 'Source license: ' + license_text + '. ' + ADAPTATION)
+    add(identity, 'rights', 'Source license: ' + license_text + '. ' + adaptation)
     add(add(identity, 'encoding'), 'software', 'Piano Uploader MIDI draft')
     if source.get('page_url') or source.get('url'):
         add(identity, 'source', source.get('page_url') or source['url'])
@@ -214,7 +238,6 @@ def generate_score(content, title, source=None):
     add(part_info, 'part-name', 'Piano')
     part = add(root, 'part', id='P1')
     fifths = KEYS.get(key, 0)
-    upper, lower = allocate_voices(notes, 1), allocate_voices(notes, 2)
     voices = [(1, i + 1, voice) for i, voice in enumerate(upper)] + [(2, len(upper) + i + 1, voice) for i, voice in enumerate(lower)]
     for number in range(measure_count):
         left, right = number * measure_length, (number + 1) * measure_length
@@ -269,4 +292,4 @@ def generate_score(content, title, source=None):
     if len(root.findall('.//note')) > 20000:
         raise HTTPException(413, 'This MIDI produces too many notation symbols. Use a shorter, simpler excerpt.')
     musicxml = ET.tostring(root, encoding='utf-8', xml_declaration=True).decode('utf-8')
-    return {'musicxml': musicxml, 'title': title, 'warnings': warnings, 'source': source, 'note_count': len(notes), 'duration_seconds': duration}
+    return {'musicxml': musicxml, 'title': title, 'warnings': warnings, 'source': source, 'note_count': len(notes), 'duration_seconds': duration, 'reduction_applied': reduced}

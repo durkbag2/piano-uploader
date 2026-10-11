@@ -30,11 +30,13 @@ Restart the backend and frontend using the README's two-terminal instructions. T
 4. Review the notation preview and conversion warnings. Download **PDF** for a printable score, or **MusicXML** to refine the notation in an editor.
 5. Choose **Save PDF to Google Drive** or **Save PDF to iCloud Drive** to use the active library destination. macOS manages iCloud synchronization; Smart Pianist import remains a manual step on your iPad.
 
-For a local file, choose **Or use your own original MIDI file**. Use a piano arrangement rather than an entire ensemble recording. Local uploads accept Standard MIDI format 0 or 1 files up to 2 MB. There is no 5,000-note input cutoff. Conversion limits are 15 minutes and 256 measures; unusually dense overlapping voices or too many notation symbols are rejected. Source download availability, licensing, and musical quality vary by arrangement.
+For a local file, choose **Or use your own original MIDI file**. Use a piano arrangement rather than an entire ensemble recording. Local uploads accept Standard MIDI format 0 or 1 files up to 2 MB. There is no 5,000-note input cutoff. Conversion limits are 15 minutes and 256 measures; too many notation symbols are rejected. Dense overlapping voices are reduced automatically as described below. Source download availability, licensing, and musical quality vary by arrangement.
 
 ## What the generated draft means
 
 The conversion uses MIDI pitches and note timing to produce MusicXML, which is engraved in the browser and exported as a vector PDF. It infers a division between the two staves and quantizes rhythm; it does not infer a pianist's intended fingering or produce a reviewed professional arrangement. Performance MIDI may require substantial editing. Review chords, rests, ties, accidentals, hand placement, and any reported omissions or approximations.
+
+If one staff would require more than 12 independent overlapping voices, the converter reduces that staff to one voice of chords grouped by note onset. Distinct pitches and attacks are retained. Notes within each chord receive a shared duration, clipped at the next attack, so sustain and individual release times change. Normal-density voices keep their independent timing and ties. The preview warning and exported PDF/MusicXML credits disclose any dense-voice reduction. Review the resulting chord sizes and note lengths before playing; a multi-instrument MIDI does not automatically become a physically playable piano arrangement.
 
 Existing PDFs can retain a human engraver's intentional voicing and notation more faithfully than regenerating from performance MIDI. MusicXML is provided so you can correct the draft in a notation editor. Audio, arbitrary music URLs, paid-site downloads, and automatic Smart Pianist control are outside this workflow.
 
