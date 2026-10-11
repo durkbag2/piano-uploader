@@ -1,5 +1,9 @@
 # Validation performed
 
+## Removal of the 5,000-note input cutoff
+
+All **134 backend tests passed on Python 3.9.25 and Python 3.12** after removing the MIDI note-start count rejection. A regression uploads a 6,004-note MIDI through the actual score-creation endpoint, verifies success and all 6,004 pitched notes in the generated MusicXML, and checks each voice's measure timing. No replacement input note-count cutoff was added. Existing file-size, event-count, duration, measure, voice-density and rendered-symbol safeguards remain.
+
 ## BitMidi website-flow correction
 
 All **133 backend tests passed on Python 3.9.25 and Python 3.12**, and the production build passed. New tests exercise the exact requested flow with representative server-rendered HTML: search `Backstreet Boys Drowning`, recognize the top result only when all keywords match, open its source page, follow the labeled download link, generate MusicXML, and reuse cached MIDI bytes. Tests reject ambiguous/external/unlabeled download links and prevent selecting a top title with a missing keyword. They also verify HTTP 520 is reported as source unavailability rather than an empty successful search. Existing JSON fallback tests remain active.

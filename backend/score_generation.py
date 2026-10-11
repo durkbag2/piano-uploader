@@ -8,7 +8,6 @@ import mido
 from fastapi import HTTPException
 
 MAX_MIDI_BYTES = 2 * 1024 * 1024
-MAX_NOTES = 5000
 MAX_DURATION = 15 * 60
 MAX_MEASURES = 256
 DIVISIONS = 24  # Supports sixteenth notes, dotted rhythms and eighth triplets.
@@ -47,7 +46,6 @@ def parse_midi(content):
     tick = 0
     elapsed = 0
     tempo = 500000
-    starts = 0
     percussion = False
     sustain = False
     for message in mido.merge_tracks(midi.tracks):
@@ -73,9 +71,6 @@ def parse_midi(content):
             key = (message.channel, message.note)
             if message.type == 'note_on' and message.velocity > 0:
                 active[key].append(tick)
-                starts += 1
-                if starts > MAX_NOTES:
-                    raise HTTPException(413, 'MIDI exceeds the 5,000-note draft limit.')
             elif active[key]:
                 start = active[key].popleft()
                 if tick > start:

@@ -30,7 +30,7 @@ Restart the backend and frontend using the README's two-terminal instructions. T
 4. Review the notation preview and conversion warnings. Download **PDF** for a printable score, or **MusicXML** to refine the notation in an editor.
 5. Choose **Save PDF to Google Drive** or **Save PDF to iCloud Drive** to use the active library destination. macOS manages iCloud synchronization; Smart Pianist import remains a manual step on your iPad.
 
-For a local file, choose **Or use your own original MIDI file**. Use a piano arrangement rather than an entire ensemble recording. Local uploads accept Standard MIDI format 0 or 1 files up to 2 MB. Conversion limits are 15 minutes, 5,000 notes, and 256 measures; unusually dense overlapping voices or too many notation symbols are rejected. Source download availability, licensing, and musical quality vary by arrangement.
+For a local file, choose **Or use your own original MIDI file**. Use a piano arrangement rather than an entire ensemble recording. Local uploads accept Standard MIDI format 0 or 1 files up to 2 MB. There is no 5,000-note input cutoff. Conversion limits are 15 minutes and 256 measures; unusually dense overlapping voices or too many notation symbols are rejected. Source download availability, licensing, and musical quality vary by arrangement.
 
 ## What the generated draft means
 

@@ -129,18 +129,13 @@ def test_format2_and_empty_notes_rejected():
         assert error.value.status_code == 422
 
 
-def test_duration_note_measure_and_file_limits(monkeypatch):
+def test_duration_measure_and_file_limits(monkeypatch):
     data = midi([(0, on(60)), (480, off(60))])
     monkeypatch.setattr(scores, 'MAX_MIDI_BYTES', len(data) - 1)
     with pytest.raises(HTTPException) as error:
         scores.generate_score(data, 'Large')
     assert error.value.status_code == 413
     monkeypatch.setattr(scores, 'MAX_MIDI_BYTES', 2 * 1024 * 1024)
-    monkeypatch.setattr(scores, 'MAX_NOTES', 0)
-    with pytest.raises(HTTPException) as error:
-        scores.generate_score(data, 'Many notes')
-    assert error.value.status_code == 413
-    monkeypatch.setattr(scores, 'MAX_NOTES', 5000)
     with pytest.raises(HTTPException) as error:
         scores.generate_score(midi([(0, on(60)), (480 * 2000, off(60))]), 'Long')
     assert error.value.status_code == 413
@@ -244,4 +239,20 @@ def test_single_title_and_inactive_voices_hidden_without_changing_timing():
     # Empty bass staff still has one visible rest voice.
     bass = [note for note in second.findall('note') if note.findtext('staff') == '2']
     assert bass and all(note.attrib.get('print-object') != 'no' for note in bass)
+    assert_measure_timing(root)
+
+
+def test_uploaded_midi_over_five_thousand_notes_generates_complete_score(client):
+    events = []
+    for step in range(1501):
+        start = step * 120
+        for pitch in (48, 55, 60, 64):
+            events.extend([(start, on(pitch)), (start + 60, off(pitch))])
+    data = midi(events)
+    response = client.post('/api/scores/from-midi?title=Large%20piano%20score&rights_confirmed=true', content=data, headers={'Content-Type': 'audio/midi'})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['note_count'] == 6004
+    root = ET.fromstring(result['musicxml'])
+    assert len(root.findall('.//note/pitch')) == 6004
     assert_measure_timing(root)
