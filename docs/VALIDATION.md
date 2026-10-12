@@ -1,5 +1,13 @@
 # Validation performed
 
+## Single prominent piano part selection
+
+All **155 backend tests passed on Python 3.9.25 and Python 3.12**, and the production build passed. New tests cover recognized piano parts over busier guitar/percussion, activity/velocity ranking between piano parts, unlabeled/non-piano fallbacks, format-0 channels, separate tracks sharing a channel, exact conductor tempo/meter/key timing, manual selection, explicit all-part generation, invalid IDs, mixed-program warnings, both generation endpoints, and retention of original source bytes in the download cache.
+
+The real Moonlight MIDI selected track/channel `0:0` with **807 notes from 1,157 original pitched notes**; manually selecting `1:0` used 350 notes, and explicit all-part generation retained 1,157. That file has no track names or program changes, so the app reports its automatic choice as an inferred unlabeled/default-instrument part rather than verified piano instrumentation.
+
+Chromium uploaded a mixed-band MIDI to the running backend and rendered/exported the automatically selected Main Piano part (12 notes), excluding busier guitar (80 notes), quiet piano (8 notes), and percussion (100 notes). Manual part changes regenerated Quiet Piano (8 notes) and all pitched parts (100 notes) from the same original file; a new upload reset the selector to automatic. Real Moonlight upload/rendering, the unlabeled-part warning, mobile width, and JavaScript-error checks passed. The PDF retained the selected-part explanation. Selection is a metadata/activity heuristic, not audio-based prominence detection or a completed musical readability review of the user's file.
+
 ## Dense overlapping voice reduction
 
 All **135 backend tests passed on Python 3.9.25 and Python 3.12**, and the production build passed. A regression exercises a MIDI requiring more than 12 independent voices in both staves: the actual upload endpoint generates a two-voice chord reduction instead of the previous overlap error. It verifies exact preservation of distinct pitch/onset pairs, correct per-voice measure timing, and disclosure of adjusted note lengths in warnings and MusicXML credits. The existing normal-density polyphony/tie test confirms those scores are not reduced.

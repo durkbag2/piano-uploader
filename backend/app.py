@@ -603,6 +603,7 @@ def capture_search(body: SearchCapture):
 
 
 class ScoreSource(BaseModel):
+    part_id: str = Field(default='auto', min_length=1, max_length=64)
     source_page_url: Optional[str] = Field(default=None, max_length=2048)
     midi_url: str = Field(min_length=1, max_length=2048)
     title: str = Field(min_length=1, max_length=200)
@@ -610,7 +611,7 @@ class ScoreSource(BaseModel):
 
 
 @app.post('/api/scores/from-midi')
-async def score_from_midi(request: Request, title: str = Query(..., min_length=1, max_length=200), rights_confirmed: bool = False):
+async def score_from_midi(request: Request, title: str = Query(..., min_length=1, max_length=200), rights_confirmed: bool = False, part_id: str = Query('auto', min_length=1, max_length=64)):
     from .score_generation import generate_score, MAX_MIDI_BYTES
     if not rights_confirmed:
         raise HTTPException(400, 'Confirm that you have permission to create sheet music from this MIDI.')
@@ -628,7 +629,7 @@ async def score_from_midi(request: Request, title: str = Query(..., min_length=1
         if size > MAX_MIDI_BYTES:
             raise HTTPException(413, 'MIDI exceeds the 2 MB limit.')
         chunks.append(chunk)
-    return await asyncio.to_thread(generate_score, b''.join(chunks), title.strip())
+    return await asyncio.to_thread(generate_score, b''.join(chunks), title.strip(), None, part_id)
 
 
 @app.post('/api/scores/from-source')
@@ -640,7 +641,7 @@ async def score_from_source(body: ScoreSource):
     if not body.title.strip():
         raise HTTPException(400, 'A title is required.')
     content, source = await download_source(body.midi_url, body.title.strip(), body.source_page_url, cache_dir=STATE_DIR / 'midi-cache')
-    result = await asyncio.to_thread(generate_score, content, body.title.strip(), source)
+    result = await asyncio.to_thread(generate_score, content, body.title.strip(), source, body.part_id)
     if not source.get('metadata_verified'):
         result['warnings'].append('Source attribution could not be verified automatically. Check the source page and preserve all required credits.')
     return result

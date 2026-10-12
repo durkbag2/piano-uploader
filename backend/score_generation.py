@@ -207,8 +207,11 @@ def write_piece(measure, pitches, duration, staff, voice, start, original_start,
         start += amount
 
 
-def generate_score(content, title, source=None):
-    notes, tempos, meter, key, duration, warnings = parse_midi(content)
+def generate_score(content, title, source=None, part_id='auto'):
+    from .midi_parts import select_part
+    selected_content, selection, selection_warnings = select_part(content, part_id, MAX_MIDI_BYTES)
+    notes, tempos, meter, key, duration, warnings = parse_midi(selected_content)
+    warnings.extend(warning for warning in selection_warnings if warning not in warnings)
     (upper, upper_reduced), (lower, lower_reduced) = allocate_voices(notes, 1), allocate_voices(notes, 2)
     reduced = upper_reduced or lower_reduced
     adaptation = ADAPTATION
@@ -229,7 +232,7 @@ def generate_score(content, title, source=None):
     license_text = source.get('license', 'Check source')
     if source.get('license_url') and source['license_url'] not in license_text:
         license_text += ' (' + source['license_url'] + ')'
-    add(identity, 'rights', 'Source license: ' + license_text + '. ' + adaptation)
+    add(identity, 'rights', 'Source license: ' + license_text + '. ' + adaptation + ' ' + selection['selection_notice'])
     add(add(identity, 'encoding'), 'software', 'Piano Uploader MIDI draft')
     if source.get('page_url') or source.get('url'):
         add(identity, 'source', source.get('page_url') or source['url'])
@@ -292,4 +295,4 @@ def generate_score(content, title, source=None):
     if len(root.findall('.//note')) > 20000:
         raise HTTPException(413, 'This MIDI produces too many notation symbols. Use a shorter, simpler excerpt.')
     musicxml = ET.tostring(root, encoding='utf-8', xml_declaration=True).decode('utf-8')
-    return {'musicxml': musicxml, 'title': title, 'warnings': warnings, 'source': source, 'note_count': len(notes), 'duration_seconds': duration, 'reduction_applied': reduced}
+    return {'musicxml': musicxml, 'title': title, 'warnings': warnings, 'source': source, 'note_count': len(notes), 'duration_seconds': duration, **selection, 'selected_note_count': len(notes), 'reduction_applied': reduced}
