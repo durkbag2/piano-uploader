@@ -1,5 +1,11 @@
 # Validation performed
 
+## Generated score playback
+
+All **167 backend tests passed on Python 3.9.25 and Python 3.12**, and the production build passed. Playback events are derived from the final MusicXML. New tests cover chords, independent voices and backups, rests, ties within and across measures, triplet/dotted durations, tempo changes during sustained notes, tempo direction offsets, selected-part isolation, dense-voice reduction timing and invalid timing. Dynamics are uniform in the synthesized preview.
+
+Chromium generated scores through the actual upload endpoint and confirmed nonzero Web Audio output with the selected Main Piano pitches. Play/pause, stop/reset, seeking, 2× speed, completion/restart, part-change disposal and resuming a sustained note passed. The real Moonlight score confirmed bounded lookahead scheduling, seeking while playing, changing speed while playing and closing the audio context when navigating away. An unsupported-audio browser simulation showed the expected error. Mobile width and JavaScript-error checks passed. These checks establish preview playback and control behavior; they do not establish sampled-piano fidelity or a musician-reviewed arrangement.
+
 ## Single prominent piano part selection
 
 All **155 backend tests passed on Python 3.9.25 and Python 3.12**, and the production build passed. New tests cover recognized piano parts over busier guitar/percussion, activity/velocity ranking between piano parts, unlabeled/non-piano fallbacks, format-0 channels, separate tracks sharing a channel, exact conductor tempo/meter/key timing, manual selection, explicit all-part generation, invalid IDs, mixed-program warnings, both generation endpoints, and retention of original source bytes in the download cache.

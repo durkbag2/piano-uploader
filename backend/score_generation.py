@@ -295,4 +295,6 @@ def generate_score(content, title, source=None, part_id='auto'):
     if len(root.findall('.//note')) > 20000:
         raise HTTPException(413, 'This MIDI produces too many notation symbols. Use a shorter, simpler excerpt.')
     musicxml = ET.tostring(root, encoding='utf-8', xml_declaration=True).decode('utf-8')
-    return {'musicxml': musicxml, 'title': title, 'warnings': warnings, 'source': source, 'note_count': len(notes), 'duration_seconds': duration, **selection, 'selected_note_count': len(notes), 'reduction_applied': reduced}
+    from .score_playback import from_musicxml
+    playback = from_musicxml(musicxml)
+    return {'playback': playback, 'musicxml': musicxml, 'title': title, 'warnings': warnings, 'source': source, 'note_count': len(notes), 'duration_seconds': duration, **selection, 'selected_note_count': len(notes), 'reduction_applied': reduced}

@@ -27,10 +27,16 @@ Restart the backend and frontend using the README's two-terminal instructions. T
 1. Use **Create piano score for this search** from Discover, **Create piano score** from a result card, or open **Create a score** and enter a title. The lookup includes BitMidi first by default, alongside Internet Archive.
 2. Review the candidates and select an arrangement. When the source also has a traditional PDF, you can use that original score instead of regenerating notation.
 3. Leave **Part to include in the piano score** on **Automatic — prominent piano part**, confirm permission, then choose **Create piano score**. The backend downloads the selected MIDI directly and isolates one likely piano part. BitMidi downloads are cached locally for repeat generation; no manual file transfer is needed.
-4. Review the notation preview and conversion warnings. Download **PDF** for a printable score, or **MusicXML** to refine the notation in an editor.
+4. Review the notation preview and conversion warnings. Use **Play** to hear the generated score, with pause, stop, seeking and playback speed controls. Download **PDF** for a printable score, or **MusicXML** to refine the notation in an editor.
 5. Choose **Save PDF to Google Drive** or **Save PDF to iCloud Drive** to use the active library destination. macOS manages iCloud synchronization; Smart Pianist import remains a manual step on your iPad.
 
 For a local file, choose **Or use your own original MIDI file**. Use a piano arrangement rather than an entire ensemble recording. Local uploads accept Standard MIDI format 0 or 1 files up to 2 MB. There is no 5,000-note input cutoff. Conversion limits are 15 minutes and 256 measures; too many notation symbols are rejected. Dense overlapping voices are reduced automatically as described below. Source download availability, licensing, and musical quality vary by arrangement.
+
+## Listen to the generated score
+
+Playback uses the final generated MusicXML: it follows the selected part, quantized rhythm, rests, chords, ties and tempo changes, including any dense-voice reduction. It therefore lets you hear the notation you are reviewing. Tied notes sustain across written segments without repeated attacks. The playback timeline includes rests through the end of the written score; its length can differ from the original MIDI duration shown in the score summary.
+
+The browser synthesizes a piano-style preview using Web Audio, with uniform dynamics. It does not reproduce the source MIDI's instruments, pedal or expressive velocities. Click **Play** to enable audio, then use **Pause**, **Stop**, the position slider and the speed selector to review a passage. Changing the source or selected part stops the old preview. No additional audio downloads or services are required.
 
 ## What the generated draft means
 
